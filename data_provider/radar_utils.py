@@ -20,10 +20,10 @@ def gen_filelist(root):
         def sorted_walk(r):
             nonlocal i, cur_time, flush_count
             if r.endswith(os.sep + 'CR'):
-                for file in filter(lambda name: name.endswith('.bin'), os.listdir(r)):
+                for file in filter(lambda name: name.endswith('.bin'), sorted(os.listdir(r))):
                     time_str = file.split('_')[4]
                     time = datetime.datetime.strptime(time_str, '%Y%m%d%H%M%S')
-                    output.write("%d,%s,%s"%(i, time_str, os.path.join(r, file)))
+                    output.write("%d,%s,%s"%(i, time_str, os.path.realpath(os.path.join(r, file))))
                     output.write("\n")
                     if i == 0 or time - cur_time < threshould:
                         i += 1
