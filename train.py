@@ -153,7 +153,7 @@ def main(argv=None):
     # load data
     train_input_handle, test_input_handle = datasets_factory.data_provider(
         FLAGS.dataset_name, FLAGS.train_data_paths, FLAGS.valid_data_paths,
-        FLAGS.batch_size, FLAGS.img_width)
+        FLAGS.batch_size, FLAGS.img_width， FLAGS.seq_length)
 
     print("Initializing models")
     model = Model()

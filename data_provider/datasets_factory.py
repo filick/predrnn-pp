@@ -1,11 +1,12 @@
-from data_provider import mnist
+from data_provider import mnist, radar
 
 datasets_map = {
     'mnist': mnist,
+    'radar': radar
 }
 
 def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
-                  img_width, is_training=True):
+                  img_width, seq_length, is_training=True):
     '''Given a dataset name and returns a Dataset.
     Args:
         dataset_name: String, the name of the dataset.
@@ -47,3 +48,25 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
             return train_input_handle, test_input_handle
         else:
             return test_input_handle
+
+    if dataset_name == 'radar':
+        test_input_handle = datasets_map[dataset_name].InputHandle(train_data_paths, seq_length, batch_size, True)
+        test_input_handle.begin(do_shuffle = False)
+        if is_training:
+            train_input_handle = datasets_map[dataset_name].InputHandle(train_data_paths, seq_length, batch_size, False)
+            train_input_handle.begin(do_shuffle = True)
+            return train_input_handle, test_input_handle
+        else:
+            return test_input_handle
+
+
+if __name__ == '__main__':
+    print('test')
+    train_input_handle, test_input_handle = data_provider('radar', '/Volumes/Elements/data/radar/list-Z9080', '', 2, 502, 10)
+    from IPython import embed
+    if not train_input_handle.no_batch_left():
+        ims = train_input_handle.get_batch()
+        embed()
+    if not test_input_handle.no_batch_left():
+        ims = test_input_handle.get_batch()
+        embed()
