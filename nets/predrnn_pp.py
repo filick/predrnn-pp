@@ -14,7 +14,7 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
     shape = images.get_shape().as_list()
     output_channels = shape[-1]
 
-    for i in xrange(num_layers):
+    for i in range(num_layers):
         if i == 0:
             num_hidden_in = num_hidden[num_layers-1]
         else:
@@ -34,7 +34,7 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
     mem = None
     z_t = None
 
-    for t in xrange(seq_length-1):
+    for t in range(seq_length-1):
         reuse = bool(gen_images)
         with tf.variable_scope('predrnn_pp', reuse=reuse):
             if t < input_length:
@@ -46,7 +46,7 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
             z_t = gradient_highway(hidden[0], z_t)
             hidden[1], cell[1], mem = lstm[1](z_t, hidden[1], cell[1], mem)
 
-            for i in xrange(2, num_layers):
+            for i in range(2, num_layers):
                 hidden[i], cell[i], mem = lstm[i](hidden[i-1], hidden[i], cell[i], mem)
 
             x_gen = tf.layers.conv2d(inputs=hidden[num_layers-1],
