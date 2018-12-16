@@ -140,9 +140,9 @@ class Model(object):
         tower_grads = []
         tower_losses = []
         devices = self.gpus or ['/cpu:0']
-        for i, d in enumerate(devices):
-            with tf.device(d):
-                with tf.name_scope('tower_%d' % i):
+        with tf.variable_scope(tf.get_variable_scope()) as outer_scope:
+            for i, d in enumerate(devices):
+                with tf.device(d), tf.name_scope('tower_%d' % i):
                     output_list = models_factory.construct_model(
                         FLAGS.model_name, x_splits[i],
                         mask_true_splits[i],
@@ -155,18 +155,20 @@ class Model(object):
                     pred_ims = gen_ims[:, FLAGS.input_length - 1:]
                     # self.loss_train = loss / FLAGS.batch_size
                     # gradients
-                    grads = opt.compute_gradients(loss)
-                    tower_losses.append(loss)
-                    tower_grads.append(grads)
-                    pred_seq.append(pred_ims)
-                    tf.get_variable_scope().reuse_variables()
+                    with tf.name_scope("compute_gradients"):
+                        grads = opt.compute_gradients(loss)
+                        tower_grads.append(grads)
 
-        self.loss_train = tf.add_n(tower_losses) / FLAGS.batch_size
-        mean_grads = average_gradients(tower_grads)
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            self.train_op = opt.apply_gradients(mean_grads)
-        self.pred_seq = tf.concat(pred_seq, 0)
+                    tower_losses.append(loss)
+                    pred_seq.append(pred_ims)
+                    outer_scope.reuse_variables()
+
+        with tf.name_scope("apply_gradients"), tf.device(devices[0]):
+            self.loss_train = tf.add_n(tower_losses) / FLAGS.batch_size
+            mean_grads = average_gradients(tower_grads)
+            global_step = tf.train.get_or_create_global_step()
+            self.train_op = opt.apply_gradients(mean_grads, global_step)
+            self.pred_seq = tf.concat(pred_seq, 0)
 
         # session
         variables = tf.global_variables()
