@@ -73,15 +73,15 @@ class Model(object):
         self.x = tf.placeholder(tf.float32,
                                 [FLAGS.batch_size,
                                  FLAGS.seq_length,
-                                 FLAGS.img_width/FLAGS.patch_size,
-                                 FLAGS.img_width/FLAGS.patch_size,
+                                 FLAGS.img_width//FLAGS.patch_size,
+                                 FLAGS.img_width//FLAGS.patch_size,
                                  FLAGS.patch_size*FLAGS.patch_size*FLAGS.img_channel])
 
         self.mask_true = tf.placeholder(tf.float32,
                                         [FLAGS.batch_size,
                                          FLAGS.seq_length-FLAGS.input_length-1,
-                                         FLAGS.img_width/FLAGS.patch_size,
-                                         FLAGS.img_width/FLAGS.patch_size,
+                                         FLAGS.img_width//FLAGS.patch_size,
+                                         FLAGS.img_width//FLAGS.patch_size,
                                          FLAGS.patch_size*FLAGS.patch_size*FLAGS.img_channel])
 
         grads = []
@@ -176,25 +176,17 @@ def main(argv=None):
             (FLAGS.batch_size,FLAGS.seq_length-FLAGS.input_length-1))
         true_token = (random_flip < eta)
         #true_token = (random_flip < pow(base,itr))
-        ones = np.ones((FLAGS.img_width//FLAGS.patch_size,
-                        FLAGS.img_width//FLAGS.patch_size,
-                        FLAGS.patch_size**2*FLAGS.img_channel))
-        zeros = np.zeros((FLAGS.img_width//FLAGS.patch_size,
-                          FLAGS.img_width//FLAGS.patch_size,
-                          FLAGS.patch_size**2*FLAGS.img_channel))
-        mask_true = []
+        mask_true = np.zeros([FLAGS.batch_size,
+                              FLAGS.seq_length-FLAGS.input_length-1,
+                              FLAGS.img_width//FLAGS.patch_size,
+                              FLAGS.img_width//FLAGS.patch_size,
+                              FLAGS.patch_size**2*FLAGS.img_channel], 'float32')
         for i in range(FLAGS.batch_size):
             for j in range(FLAGS.seq_length-FLAGS.input_length-1):
                 if true_token[i,j]:
-                    mask_true.append(ones)
+                    mask_true[i, j, :] = 1
                 else:
-                    mask_true.append(zeros)
-        mask_true = np.array(mask_true)
-        mask_true = np.reshape(mask_true, (FLAGS.batch_size,
-                                           FLAGS.seq_length-FLAGS.input_length-1,
-                                           FLAGS.img_width//FLAGS.patch_size,
-                                           FLAGS.img_width//FLAGS.patch_size,
-                                           FLAGS.patch_size**2*FLAGS.img_channel))
+                    mask_true[i, j, :] = 0
         cost = model.train(ims, lr, mask_true)
         if FLAGS.reverse_input:
             ims_rev = ims[:,::-1]
