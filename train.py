@@ -10,6 +10,7 @@ from nets import models_factory
 from data_provider import datasets_factory
 from utils import preprocess
 from utils import metrics
+from utils import tf_util
 from skimage.measure import compare_ssim
 
 # -----------------------------------------------------------------------------
@@ -25,7 +26,7 @@ tf.app.flags.DEFINE_string('valid_data_paths',
                            'data/moving-mnist-example/moving-mnist-valid.npz',
                            'validation data paths.')
 tf.app.flags.DEFINE_string('save_dir', 'checkpoints/mnist_predrnn_pp',
-                            'dir to store trained net.')
+                           'dir to store trained net.')
 tf.app.flags.DEFINE_string('gen_frm_dir', 'results/mnist_predrnn_pp',
                            'dir to store result.')
 # model
@@ -67,49 +68,104 @@ tf.app.flags.DEFINE_integer('test_interval', 2000,
 tf.app.flags.DEFINE_integer('snapshot_interval', 10000,
                             'number of iters saving models.')
 
+
+def average_gradients(tower_grads):
+    """Calculate the average gradient for each shared variable across all towers.
+    Note that this function provides a synchronization point across all towers.
+    Args:
+      tower_grads: List of lists of (gradient, variable) tuples. The outer list
+        is over individual gradients. The inner list is over the gradient
+        calculation for each tower.
+    Returns:
+       List of pairs of (gradient, variable) where the gradient has been averaged
+       across all towers.
+    """
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+        # Note that each grad_and_vars looks like the following:
+        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+        grads = []
+        for g, _ in grad_and_vars:
+            # Add 0 dimension to the gradients to represent the tower.
+            expanded_g = tf.expand_dims(g, 0)
+
+            # Append on a 'tower' dimension which we will average over below.
+            grads.append(expanded_g)
+
+        # Average over the 'tower' dimension.
+        grad = tf.concat(0, grads)
+        grad = tf.reduce_sum(grad, 0) / FLAGS.batch_size
+
+        # Keep in mind that the Variables are redundant because they are shared
+        # across towers. So .. we will just return the first tower's pointer to
+        # the Variable.
+        v = grad_and_vars[0][1]
+        grad_and_var = (grad, v)
+        average_grads.append(grad_and_var)
+    return average_grads
+
+
 class Model(object):
     def __init__(self):
+        self.gpus = tf_util.available_gpus()
+        self.num_gpus = len(self.gpus)
+        if self.num_gpus:
+            assert FLAGS.batch_size % self.num_gpus == 0, "Batch size should be an integral multiple of number of GPUs"
         # inputs
         self.x = tf.placeholder(tf.float32,
                                 [FLAGS.batch_size,
                                  FLAGS.seq_length,
-                                 FLAGS.img_width//FLAGS.patch_size,
-                                 FLAGS.img_width//FLAGS.patch_size,
-                                 FLAGS.patch_size*FLAGS.patch_size*FLAGS.img_channel])
+                                 FLAGS.img_width // FLAGS.patch_size,
+                                 FLAGS.img_width // FLAGS.patch_size,
+                                 FLAGS.patch_size * FLAGS.patch_size * FLAGS.img_channel])
 
         self.mask_true = tf.placeholder(tf.float32,
                                         [FLAGS.batch_size,
-                                         FLAGS.seq_length-FLAGS.input_length-1,
-                                         FLAGS.img_width//FLAGS.patch_size,
-                                         FLAGS.img_width//FLAGS.patch_size,
-                                         FLAGS.patch_size*FLAGS.patch_size*FLAGS.img_channel])
+                                         FLAGS.seq_length - FLAGS.input_length - 1,
+                                         FLAGS.img_width // FLAGS.patch_size,
+                                         FLAGS.img_width // FLAGS.patch_size,
+                                         FLAGS.patch_size * FLAGS.patch_size * FLAGS.img_channel])
+        x_splits = tf.split(self.x, max(self.num_gpus, 1))
+        mask_true_splits = tf.split(self.mask_true, max(self.num_gpus, 1))
 
-        grads = []
-        loss_train = []
-        self.pred_seq = []
         self.tf_lr = tf.placeholder(tf.float32, shape=[])
         num_hidden = [int(x) for x in FLAGS.num_hidden.split(',')]
         print(num_hidden)
         num_layers = len(num_hidden)
-        with tf.variable_scope(tf.get_variable_scope()):
-            # define a model
-            output_list = models_factory.construct_model(
-                FLAGS.model_name, self.x,
-                self.mask_true,
-                num_layers, num_hidden,
-                FLAGS.filter_size, FLAGS.stride,
-                FLAGS.seq_length, FLAGS.input_length,
-                FLAGS.layer_norm)
-            gen_ims = output_list[0]
-            loss = output_list[1]
-            pred_ims = gen_ims[:,FLAGS.input_length-1:]
-            self.loss_train = loss / FLAGS.batch_size
-            # gradients
-            all_params = tf.trainable_variables()
-            grads.append(tf.gradients(loss, all_params))
-            self.pred_seq.append(pred_ims)
 
-        self.train_op = tf.train.AdamOptimizer(FLAGS.lr).minimize(loss)
+        opt = tf.train.AdamOptimizer(FLAGS.lr)
+
+        pred_seq = []
+        tower_grads = []
+        tower_losses = []
+        devices = self.gpus or ['/cpu:0']
+        for i, d in enumerate(devices):
+            with tf.device(d):
+                with tf.name_scope('tower_%d' % i):
+                    output_list = models_factory.construct_model(
+                        FLAGS.model_name, x_splits[i],
+                        mask_true_splits[i],
+                        num_layers, num_hidden,
+                        FLAGS.filter_size, FLAGS.stride,
+                        FLAGS.seq_length, FLAGS.input_length,
+                        FLAGS.layer_norm)
+                    gen_ims = output_list[0]
+                    loss = output_list[1]
+                    pred_ims = gen_ims[:, FLAGS.input_length - 1:]
+                    # self.loss_train = loss / FLAGS.batch_size
+                    # gradients
+                    grads = opt.compute_gradients(loss)
+                    tower_losses.append(loss)
+                    tower_grads.append(grads)
+                    pred_seq.append(pred_ims)
+                    tf.get_variable_scope().reuse_variables()
+
+        self.loss_train = tf.add_n(self.tower_losses) / FLAGS.batch_size
+        mean_grads = average_gradients(tower_grads)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            self.train_op = opt.apply_gradients(mean_grads)
+        self.pred_seq = tf.concat(pred_seq, 0)
 
         # session
         variables = tf.global_variables()
@@ -118,7 +174,7 @@ class Model(object):
         configProt = tf.ConfigProto()
         configProt.gpu_options.allow_growth = True
         configProt.allow_soft_placement = True
-        self.sess = tf.Session(config = configProt)
+        self.sess = tf.Session(config=configProt)
         self.sess.run(init)
         if FLAGS.pretrained_model:
             self.saver.restore(self.sess, FLAGS.pretrained_model)
@@ -140,6 +196,7 @@ class Model(object):
         checkpoint_path = os.path.join(FLAGS.save_dir, 'model.ckpt')
         self.saver.save(self.sess, checkpoint_path, global_step=itr)
         print('saved to ' + FLAGS.save_dir)
+
 
 def main(argv=None):
     if tf.gfile.Exists(FLAGS.save_dir):
@@ -173,25 +230,25 @@ def main(argv=None):
         else:
             eta = 0.0
         random_flip = np.random.random_sample(
-            (FLAGS.batch_size,FLAGS.seq_length-FLAGS.input_length-1))
+            (FLAGS.batch_size, FLAGS.seq_length - FLAGS.input_length - 1))
         true_token = (random_flip < eta)
         #true_token = (random_flip < pow(base,itr))
         mask_true = np.zeros([FLAGS.batch_size,
-                              FLAGS.seq_length-FLAGS.input_length-1,
-                              FLAGS.img_width//FLAGS.patch_size,
-                              FLAGS.img_width//FLAGS.patch_size,
-                              FLAGS.patch_size**2*FLAGS.img_channel], 'float32')
+                              FLAGS.seq_length - FLAGS.input_length - 1,
+                              FLAGS.img_width // FLAGS.patch_size,
+                              FLAGS.img_width // FLAGS.patch_size,
+                              FLAGS.patch_size**2 * FLAGS.img_channel], 'float32')
         for i in range(FLAGS.batch_size):
-            for j in range(FLAGS.seq_length-FLAGS.input_length-1):
-                if true_token[i,j]:
+            for j in range(FLAGS.seq_length - FLAGS.input_length - 1):
+                if true_token[i, j]:
                     mask_true[i, j, :] = 1
                 else:
                     mask_true[i, j, :] = 0
         cost = model.train(ims, lr, mask_true)
         if FLAGS.reverse_input:
-            ims_rev = ims[:,::-1]
+            ims_rev = ims[:, ::-1]
             cost += model.train(ims_rev, lr, mask_true)
-            cost = cost/2
+            cost = cost / 2
 
         if itr % FLAGS.display_interval == 0:
             print('itr: ' + str(itr))
@@ -199,12 +256,12 @@ def main(argv=None):
 
         if itr % FLAGS.test_interval == 0:
             print('test...')
-            test_input_handle.begin(do_shuffle = False)
+            test_input_handle.begin(do_shuffle=False)
             res_path = os.path.join(FLAGS.gen_frm_dir, str(itr))
             os.mkdir(res_path)
             avg_mse = 0
             batch_id = 0
-            img_mse,ssim,psnr,fmae,sharp= [],[],[],[],[]
+            img_mse, ssim, psnr, fmae, sharp = [], [], [], [], []
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 img_mse.append(0)
                 ssim.append(0)
@@ -212,10 +269,10 @@ def main(argv=None):
                 fmae.append(0)
                 sharp.append(0)
             mask_true = np.zeros((FLAGS.batch_size,
-                                  FLAGS.seq_length-FLAGS.input_length-1,
-                                  FLAGS.img_width//FLAGS.patch_size,
-                                  FLAGS.img_width//FLAGS.patch_size,
-                                  FLAGS.patch_size**2*FLAGS.img_channel))
+                                  FLAGS.seq_length - FLAGS.input_length - 1,
+                                  FLAGS.img_width // FLAGS.patch_size,
+                                  FLAGS.img_width // FLAGS.patch_size,
+                                  FLAGS.patch_size**2 * FLAGS.img_channel))
             while(test_input_handle.no_batch_left() == False):
                 batch_id = batch_id + 1
                 test_ims = test_input_handle.get_batch()
@@ -224,11 +281,12 @@ def main(argv=None):
 
                 # concat outputs of different gpus along batch
                 img_gen = np.concatenate(img_gen)
-                img_gen = preprocess.reshape_patch_back(img_gen, FLAGS.patch_size)
+                img_gen = preprocess.reshape_patch_back(
+                    img_gen, FLAGS.patch_size)
                 # MSE per frame
                 for i in range(FLAGS.seq_length - FLAGS.input_length):
-                    x = test_ims[:,i + FLAGS.input_length,:,:,0]
-                    gx = img_gen[:,i,:,:,0]
+                    x = test_ims[:, i + FLAGS.input_length, :, :, 0]
+                    gx = img_gen[:, i, :, :, 0]
                     fmae[i] += metrics.batch_mae_frame_float(gx, x)
                     gx = np.maximum(gx, 0)
                     gx = np.minimum(gx, 1)
@@ -241,8 +299,9 @@ def main(argv=None):
                     psnr[i] += metrics.batch_psnr(pred_frm, real_frm)
                     for b in range(FLAGS.batch_size):
                         sharp[i] += np.max(
-                            cv2.convertScaleAbs(cv2.Laplacian(pred_frm[b],3)))
-                        score, _ = compare_ssim(pred_frm[b],real_frm[b],full=True)
+                            cv2.convertScaleAbs(cv2.Laplacian(pred_frm[b], 3)))
+                        score, _ = compare_ssim(
+                            pred_frm[b], real_frm[b], full=True)
                         ssim[i] += score
 
                 # save prediction examples
@@ -250,27 +309,29 @@ def main(argv=None):
                     path = os.path.join(res_path, str(batch_id))
                     os.mkdir(path)
                     for i in range(FLAGS.seq_length):
-                        name = 'gt' + str(i+1) + '.png'
+                        name = 'gt' + str(i + 1) + '.png'
                         file_name = os.path.join(path, name)
-                        img_gt = np.uint8(test_ims[0,i,:,:,:] * 255)
+                        img_gt = np.uint8(test_ims[0, i, :, :, :] * 255)
                         cv2.imwrite(file_name, img_gt)
-                    for i in range(FLAGS.seq_length-FLAGS.input_length):
-                        name = 'pd' + str(i+1+FLAGS.input_length) + '.png'
+                    for i in range(FLAGS.seq_length - FLAGS.input_length):
+                        name = 'pd' + str(i + 1 + FLAGS.input_length) + '.png'
                         file_name = os.path.join(path, name)
-                        img_pd = img_gen[0,i,:,:,:]
+                        img_pd = img_gen[0, i, :, :, :]
                         img_pd = np.maximum(img_pd, 0)
                         img_pd = np.minimum(img_pd, 1)
                         img_pd = np.uint8(img_pd * 255)
                         cv2.imwrite(file_name, img_pd)
                 test_input_handle.next()
-            avg_mse = avg_mse / (batch_id*FLAGS.batch_size)
+            avg_mse = avg_mse / (batch_id * FLAGS.batch_size)
             print('mse per seq: ' + str(avg_mse))
             for i in range(FLAGS.seq_length - FLAGS.input_length):
-                print(img_mse[i] / (batch_id*FLAGS.batch_size))
-            psnr = np.asarray(psnr, dtype=np.float32)/batch_id
-            fmae = np.asarray(fmae, dtype=np.float32)/batch_id
-            ssim = np.asarray(ssim, dtype=np.float32)/(FLAGS.batch_size*batch_id)
-            sharp = np.asarray(sharp, dtype=np.float32)/(FLAGS.batch_size*batch_id)
+                print(img_mse[i] / (batch_id * FLAGS.batch_size))
+            psnr = np.asarray(psnr, dtype=np.float32) / batch_id
+            fmae = np.asarray(fmae, dtype=np.float32) / batch_id
+            ssim = np.asarray(ssim, dtype=np.float32) / \
+                (FLAGS.batch_size * batch_id)
+            sharp = np.asarray(sharp, dtype=np.float32) / \
+                (FLAGS.batch_size * batch_id)
             print('psnr per frame: ' + str(np.mean(psnr)))
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(psnr[i])
@@ -289,6 +350,6 @@ def main(argv=None):
 
         train_input_handle.next()
 
+
 if __name__ == '__main__':
     tf.app.run()
-
