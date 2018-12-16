@@ -93,7 +93,7 @@ def average_gradients(tower_grads):
             grads.append(expanded_g)
 
         # Average over the 'tower' dimension.
-        grad = tf.concat(0, grads)
+        grad = tf.concat(axis=0, values=grads)
         grad = tf.reduce_sum(grad, 0) / FLAGS.batch_size
 
         # Keep in mind that the Variables are redundant because they are shared
@@ -134,6 +134,7 @@ class Model(object):
         num_layers = len(num_hidden)
 
         opt = tf.train.AdamOptimizer(FLAGS.lr)
+        # opt = tf.train.GradientDescentOptimizer(FLAGS.lr)
 
         pred_seq = []
         tower_grads = []
@@ -160,7 +161,7 @@ class Model(object):
                     pred_seq.append(pred_ims)
                     tf.get_variable_scope().reuse_variables()
 
-        self.loss_train = tf.add_n(self.tower_losses) / FLAGS.batch_size
+        self.loss_train = tf.add_n(tower_losses) / FLAGS.batch_size
         mean_grads = average_gradients(tower_grads)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
