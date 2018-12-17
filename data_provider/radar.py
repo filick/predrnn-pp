@@ -1,14 +1,23 @@
 import numpy as np
 import random
+import cv2
 from metpy.io import Level3File
+
+
+def _img_arg(img, img_width, rng):
+    h, w = img.shape
+    nw = img_width
+    nh = h * nw // w
+    return cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
 class InputHandle(object):
 
-    def __init__(self, path, seq_length, batch_size, is_test, test_year=2017):
+    def __init__(self, path, seq_length, batch_size, img_width, is_test, test_year=2017):
         self.seq_length = seq_length
         self.batch_size = batch_size
         self.is_test = is_test
+        self.img_width = img_width
 
         self.meta = []
         test_year_str = str(test_year)
@@ -44,11 +53,12 @@ class InputHandle(object):
 
 
     def get_batch(self):
-        out = np.zeros((self.batch_size, self.seq_length, 502, 502, 1), "float32")
+        out = np.zeros((self.batch_size, self.seq_length, self.img_width, self.img_width, 1), "float32")
         for bi, b in enumerate(self.batch_idx):
             for s in range(b, b+self.seq_length):
-                data_seq = np.array(Level3File(self.meta[b][1]).sym_block[0][0]['data'])
-                out[bi, :, :, :, 0] = data_seq
+                img = np.array(Level3File(self.meta[b][1]).sym_block[0][0]['data'])
+                img = _img_arg(img, self.img_width, None)
+                out[bi, s-b, :, :, 0] = img
         return out
 
 

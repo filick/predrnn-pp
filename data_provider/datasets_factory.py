@@ -5,6 +5,7 @@ datasets_map = {
     'radar': radar
 }
 
+
 def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
                   img_width, seq_length, is_training=True):
     '''Given a dataset name and returns a Dataset.
@@ -34,27 +35,31 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
                             'minibatch_size': batch_size,
                             'input_data_type': 'float32',
                             'is_output_sequence': True,
-                            'name': dataset_name+'test iterator'}
-        test_input_handle = datasets_map[dataset_name].InputHandle(test_input_param)
-        test_input_handle.begin(do_shuffle = False)
+                            'name': dataset_name + 'test iterator'}
+        test_input_handle = datasets_map[dataset_name].InputHandle(
+            test_input_param)
+        test_input_handle.begin(do_shuffle=False)
         if is_training:
             train_input_param = {'paths': train_data_list,
                                  'minibatch_size': batch_size,
                                  'input_data_type': 'float32',
                                  'is_output_sequence': True,
-                                 'name': dataset_name+' train iterator'}
-            train_input_handle = datasets_map[dataset_name].InputHandle(train_input_param)
-            train_input_handle.begin(do_shuffle = True)
+                                 'name': dataset_name + ' train iterator'}
+            train_input_handle = datasets_map[dataset_name].InputHandle(
+                train_input_param)
+            train_input_handle.begin(do_shuffle=True)
             return train_input_handle, test_input_handle
         else:
             return test_input_handle
 
     if dataset_name == 'radar':
-        test_input_handle = datasets_map[dataset_name].InputHandle(train_data_paths, seq_length, batch_size, True)
-        test_input_handle.begin(do_shuffle = False)
+        test_input_handle = datasets_map[dataset_name].InputHandle(
+            train_data_paths, seq_length, batch_size, img_width, True)
+        test_input_handle.begin(do_shuffle=False)
         if is_training:
-            train_input_handle = datasets_map[dataset_name].InputHandle(train_data_paths, seq_length, batch_size, False)
-            train_input_handle.begin(do_shuffle = True)
+            train_input_handle = datasets_map[dataset_name].InputHandle(
+                train_data_paths, seq_length, batch_size, img_width, False)
+            train_input_handle.begin(do_shuffle=True)
             return train_input_handle, test_input_handle
         else:
             return test_input_handle
@@ -62,7 +67,8 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
 
 if __name__ == '__main__':
     print('test')
-    train_input_handle, test_input_handle = data_provider('radar', '/Volumes/Elements/data/radar/list-Z9080', '', 2, 502, 10)
+    train_input_handle, test_input_handle = data_provider(
+        'radar', '/Volumes/Elements/data/radar/list-Z9080', '', 2, 502, 10)
     from IPython import embed
     if not train_input_handle.no_batch_left():
         ims = train_input_handle.get_batch()
