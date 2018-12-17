@@ -1,6 +1,8 @@
 import numpy as np
 import os
 import datetime
+from concurrent.futures import ThreadPoolExecutor, wait
+from metpy.io import Level3File
 
 
 def gen_filelist(root):
@@ -46,5 +48,22 @@ def gen_filelist(root):
         output.close()
 
 
+def convert_to_npy(filelist, workers=10):
+    filepaths = [line.strip().split(',')[-1] for line in open(filelist, 'r')]
+    block = np.zeros((len(filepaths), 502, 502), dtype='unit8')
+
+    def task(tast_id):
+        nonlocal block, workers, filepaths
+        for i in range(tast_id, len(block), workers):
+            img = np.array(Level3File(filepaths[i]).sym_block[0][0]['data'], dtype='uint8')
+            block[i,:] = img
+
+    task_pool = ThreadPoolExecutor(max_workers=workers)
+    tasks = [task_pool.submit(task, i) for i in range(workers)]
+    wait(tasks)
+    np.save(block, filelist.split('-')[-1] + '.npz')
+
+
 if __name__ == '__main__':
-    gen_filelist('../data/radar')
+    # gen_filelist('../data/radar')
+    convert_to_npy('../data/radar/list-Z9080')
