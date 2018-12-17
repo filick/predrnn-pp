@@ -61,7 +61,7 @@ def convert_to_npy(filelist, workers=10):
     task_pool = ThreadPoolExecutor(max_workers=workers)
     tasks = [task_pool.submit(task, i) for i in range(workers)]
     wait(tasks)
-    np.save(block, filelist.split('-')[-1] + '.npz')
+    np.save(block, filelist.split('-')[-1] + '.npy')
 
 
 if __name__ == '__main__':
