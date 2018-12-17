@@ -56,7 +56,7 @@ class InputHandle(object):
         out = np.zeros((self.batch_size, self.seq_length, self.img_width, self.img_width, 1), "float32")
         for bi, b in enumerate(self.batch_idx):
             for s in range(b, b+self.seq_length):
-                img = np.array(Level3File(self.meta[b][1]).sym_block[0][0]['data'])
+                img = np.array(Level3File(self.meta[b][1]).sym_block[0][0]['data'], dtype='float32')
                 img = _img_arg(img, self.img_width, None)
                 out[bi, s-b, :, :, 0] = img
         return out
