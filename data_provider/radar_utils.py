@@ -50,20 +50,27 @@ def gen_filelist(root):
 
 def convert_to_npy(filelist, workers=10):
     filepaths = [line.strip().split(',')[-1] for line in open(filelist, 'r')]
-    block = np.zeros((len(filepaths), 502, 502), dtype='unit8')
+    block = np.zeros((len(filepaths), 502, 502), dtype='uint8')
 
-    def task(tast_id):
+    def task(worker_id):
         nonlocal block, workers, filepaths
-        for i in range(tast_id, len(block), workers):
+        for i in range(worker_id, len(block), workers):
             img = np.array(Level3File(filepaths[i]).sym_block[0][0]['data'], dtype='uint8')
             block[i,:] = img
+            if (i - worker_id) % 100 == 0:
+                print("worker %d: finished %f" % (worker_id, i / len(block)))
 
     task_pool = ThreadPoolExecutor(max_workers=workers)
     tasks = [task_pool.submit(task, i) for i in range(workers)]
     wait(tasks)
     dirname = os.path.dirname(filelist)
     outname = os.path.basename(filelist)
-    np.save(block, os.path.join(dirname, outname.split('-')[-1] + '.npy'))
+    try:
+        np.save(os.path.join(dirname, outname.split('-')[-1] + '.npy'), block)
+    except Exception as e:
+        print(e)
+        from IPython import embed
+        embed()
 
 
 if __name__ == '__main__':
