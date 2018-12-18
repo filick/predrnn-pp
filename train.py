@@ -230,8 +230,8 @@ def main(argv=None):
     logger.define_item("fmae", Logger.Scalar, ())
     logger.define_item("ssim", Logger.Scalar, ())
     logger.define_item("sharp", Logger.Scalar, ())
-    logger.define_item("image", Logger.Image, (1, 2*FLAGS.img_width, 
-        FLAGS.img_width*(FLAGS.seq_length-FLAGS.input_length), FLAGS.img_channel), dtype='uint8')
+    logger.define_item("image", Logger.Image, (1, 2 * FLAGS.img_width,
+                                               FLAGS.img_width * (FLAGS.seq_length - FLAGS.input_length), FLAGS.img_channel), dtype='uint8')
 
     delta = 0.00002
     base = 0.99998
@@ -330,14 +330,16 @@ def main(argv=None):
                     img_seq_pd = img_gen[sel]
                     img_seq_gt = test_ims[sel, FLAGS.input_length:]
                     s, h, w = img_gen.shape[1:4]
-                    out_img = np.zeros((1, h * 2, w * s, FLAGS.img_channel), dtype='uint8')
+                    out_img = np.zeros(
+                        (1, h * 2, w * s, FLAGS.img_channel), dtype='uint8')
                     for i, img_seq in enumerate([img_seq_gt, img_seq_pd]):
                         for j in range(s):
                             img = img_seq[j]
                             img = np.maximum(img, 0)
                             img = np.uint8(img * 10)
                             img = np.minimum(img, 255)
-                            out_img[0, (i*h):(i*h+h),(j*w):(j*w+w)] = img
+                            out_img[0, (i * h):(i * h + h),
+                                    (j * w):(j * w + w)] = img
                     logger.add("image", out_img, itr)
 
                 test_input_handle.next()
