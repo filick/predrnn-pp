@@ -1,4 +1,5 @@
 __author__ = 'yunbo'
+# modified by filick
 
 import time
 import numpy as np
@@ -229,6 +230,7 @@ def main(argv=None):
     logger.define_item("fmae", Logger.Scalar, ())
     logger.define_item("ssim", Logger.Scalar, ())
     logger.define_item("sharp", Logger.Scalar, ())
+    logger.define_item("image", Logger.Image, ())
 
     delta = 0.00002
     base = 0.99998
@@ -322,22 +324,21 @@ def main(argv=None):
                         ssim[i] += score
 
                 # save prediction examples
-                if batch_id <= 10:
-                    path = os.path.join(res_path, str(batch_id))
-                    os.mkdir(path)
-                    for i in range(FLAGS.seq_length):
-                        name = 'gt' + str(i + 1) + '.png'
-                        file_name = os.path.join(path, name)
-                        img_gt = np.uint8(test_ims[0, i, :, :, :] * 255)
-                        cv2.imwrite(file_name, img_gt)
-                    for i in range(FLAGS.seq_length - FLAGS.input_length):
-                        name = 'pd' + str(i + 1 + FLAGS.input_length) + '.png'
-                        file_name = os.path.join(path, name)
-                        img_pd = img_gen[0, i, :, :, :]
-                        img_pd = np.maximum(img_pd, 0)
-                        img_pd = np.minimum(img_pd, 1)
-                        img_pd = np.uint8(img_pd * 255)
-                        cv2.imwrite(file_name, img_pd)
+                if batch_id == 1:
+                    sel = np.random.randint(FLAGS.batch_size)
+                    img_seq_pd = img_gen[sel]
+                    img_seq_gt = test_ims[sel, 1:]
+                    s, h, w = img_gen.shape[1:4]
+                    out_img = np.zeros((h * 2, w * s, FLAGS.img_channel), dtype='uint8')
+                    for i, img_seq in enumerate([img_seq_gt, img_seq_pd]):
+                        for j in range(s):
+                            img = img_seq[j]
+                            img = np.maximum(img, 0)
+                            img = np.uint8(img * 5)
+                            img = np.minimum(img, 255)
+                            out_img[(i*h):(i*h+h),(j*w):(j*w+w)] = img
+                    logger.add("image", out_img, itr)
+
                 test_input_handle.next()
             avg_mse = avg_mse / (batch_id * FLAGS.batch_size)
             logger.add('mse', avg_mse, itr)
