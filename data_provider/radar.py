@@ -59,7 +59,7 @@ class InputHandle(object):
 
 
     def get_batch(self):
-        out = np.zeros((self.batch_size, self.seq_length, self.img_width, self.img_width, 1), "float32")
+        out = np.zeros((len(self.batch_idx), self.seq_length, self.img_width, self.img_width, 1), "float32")
         for bi, b in enumerate(self.batch_idx):
             for s in range(b, b+self.seq_length):
                 img = np.array(InputHandle.data[s], dtype='float32')
@@ -84,10 +84,21 @@ class InputHandle(object):
     def _gen_test_batch(self):
         batch_idx = []
         last = -10000
+        '''
         for i in self.begin_idx:
-            if self.meta[i][0] - last >= self.seq_length:
+            if self.meta[i] - last >= self.seq_length:
                 batch_idx.append(i)
-                last = self.meta[i][0]
+                last = self.meta[i]
             if len(batch_idx) == self.batch_size:
                 yield batch_idx
                 batch_idx = []
+        '''
+        i = 0
+        while i + self.batch_size <= len(self.begin_idx):
+            yield self.begin_idx[i:(i+self.batch_size)]
+            i += self.batch_size
+        '''
+        if i < len(self.begin_idx):
+            yield self.begin_idx[i:]
+        '''
+            

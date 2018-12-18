@@ -219,13 +219,16 @@ def main(argv=None):
     print("Initializing models")
     model = Model()
     lr = FLAGS.lr
+
+    # Prepare tensorboard logging
     logger = Logger(os.path.join(FLAGS.gen_frm_dir, 'board'), model.sess)
     logger.define_item("loss", Logger.Scalar, ())
-
-    # prepare tensorboard logging
-    loss_ph = tf.placeholder(tf.float32, shape=(), name='loss')
-    loss_sm = tf.summary.scalar('loss', loss_ph)
-    writer = tf.summary.FileWriter(os.path.join(FLAGS.gen_frm_dir, 'board'), model.sess.graph)
+    logger.define_item("lr", Logger.Scalar, ())
+    logger.define_item("mse", Logger.Scalar, ())
+    logger.define_item("psnr", Logger.Scalar, ())
+    logger.define_item("fmae", Logger.Scalar, ())
+    logger.define_item("ssim", Logger.Scalar, ())
+    logger.define_item("sharp", Logger.Scalar, ())
 
     delta = 0.00002
     base = 0.99998
@@ -256,6 +259,7 @@ def main(argv=None):
                     mask_true[i, j, :] = 1
                 else:
                     mask_true[i, j, :] = 0
+        logger.add('lr', lr, itr)
         cost = model.train(ims, lr, mask_true)
         if FLAGS.reverse_input:
             ims_rev = ims[:, ::-1]
@@ -293,7 +297,7 @@ def main(argv=None):
                 img_gen = model.test(test_dat, mask_true)
 
                 # concat outputs of different gpus along batch
-                img_gen = np.concatenate(img_gen)
+                # img_gen = np.concatenate(img_gen)
                 img_gen = preprocess.reshape_patch_back(
                     img_gen, FLAGS.patch_size)
                 # MSE per frame
@@ -336,6 +340,7 @@ def main(argv=None):
                         cv2.imwrite(file_name, img_pd)
                 test_input_handle.next()
             avg_mse = avg_mse / (batch_id * FLAGS.batch_size)
+            logger.add('mse', avg_mse, itr)
             print('mse per seq: ' + str(avg_mse))
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(img_mse[i] / (batch_id * FLAGS.batch_size))
@@ -346,15 +351,19 @@ def main(argv=None):
             sharp = np.asarray(sharp, dtype=np.float32) / \
                 (FLAGS.batch_size * batch_id)
             print('psnr per frame: ' + str(np.mean(psnr)))
+            logger.add('psnr', np.mean(psnr), itr)
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(psnr[i])
             print('fmae per frame: ' + str(np.mean(fmae)))
+            logger.add('fmae', np.mean(fmae), itr)
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(fmae[i])
             print('ssim per frame: ' + str(np.mean(ssim)))
+            logger.add('ssim', np.mean(ssim), itr)
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(ssim[i])
             print('sharpness per frame: ' + str(np.mean(sharp)))
+            logger.add('sharp', np.mean(sharp), itr)
             for i in range(FLAGS.seq_length - FLAGS.input_length):
                 print(sharp[i])
 

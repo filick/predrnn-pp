@@ -17,11 +17,12 @@ class Logger(object):
         self.sess = sess
         self.writer = tf.summary.FileWriter(folder, sess.graph)
         self.summaries = {}
+        self.holders = {}
 
     def define_item(self, name, category, shape, dtype=tf.float32):
-        ph = tf.placeholder(dtype, shape=shape, name=name)
-        self.summaries[name] = category(name, ph)
+        self.holders[name] = tf.placeholder(dtype, shape=shape, name=name)
+        self.summaries[name] = category(name, self.holders[name])
 
     def add(self, name, value, step):
-        s = self.sess.run(self.summaries[name], feed_dict={name: value})
+        s = self.sess.run(self.summaries[name], feed_dict={self.holders[name]: value})
         self.writer.add_summary(s, step)
