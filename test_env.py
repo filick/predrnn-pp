@@ -1,5 +1,5 @@
 import tensorflow as tf
-from net import models_factory
+from nets import models_factory
 from utils import preprocess
 import numpy as np
 
@@ -11,7 +11,7 @@ class Model(object):
                                 [1, 20, 16, 16, 16])
 
         self.mask_true = tf.placeholder(tf.float32,
-                                        [16, 9, 16, 16, 16])
+                                        [1, 9, 16, 16, 16])
 
         loss_train = []
         self.pred_seq = []
@@ -63,7 +63,7 @@ def main(argv=None):
 
     for itr in range(1, 21):
         ims = np.random.rand(1, 20, 64, 64, 1)
-        ims = preprocess.reshape_patch(ims, FLAGS.patch_size)
+        ims = preprocess.reshape_patch(ims, 4)
 
         if itr < 50000:
             eta -= delta
