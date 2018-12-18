@@ -6,6 +6,7 @@ import tensorflow as tf
 import cv2
 import sys
 import random
+import os
 from nets import models_factory
 from data_provider import datasets_factory
 from utils import preprocess

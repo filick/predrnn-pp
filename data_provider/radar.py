@@ -12,6 +12,7 @@ def _img_arg(img, img_width, rng):
 
 
 class InputHandle(object):
+    data = None
 
     def __init__(self, meta_path, seq_length, batch_size, img_width, is_test, test_year=2017):
         self.seq_length = seq_length
@@ -39,9 +40,10 @@ class InputHandle(object):
             else:
                 i = i + seq_length - 1
 
-        dirname = os.path.dirname(meta_path)
-        filename = os.path.basename(meta_path)
-        self.data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
+        if InputHandle.data is None:
+            dirname = os.path.dirname(meta_path)
+            filename = os.path.basename(meta_path)
+            InputHandle.data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
 
 
     def begin(self, do_shuffle = True):
@@ -60,7 +62,7 @@ class InputHandle(object):
         out = np.zeros((self.batch_size, self.seq_length, self.img_width, self.img_width, 1), "float32")
         for bi, b in enumerate(self.batch_idx):
             for s in range(b, b+self.seq_length):
-                img = np.array(self.data[s], dtype='float32')
+                img = np.array(InputHandle.data[s], dtype='float32')
                 img = _img_arg(img, self.img_width, None)
                 out[bi, s-b, :, :, 0] = img
         return out
