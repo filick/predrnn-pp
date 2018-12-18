@@ -12,6 +12,7 @@ from data_provider import datasets_factory
 from utils import preprocess
 from utils import metrics
 from utils import tf_util
+from utils.tf_util import Logger
 from skimage.measure import compare_ssim
 
 # -----------------------------------------------------------------------------
@@ -218,6 +219,13 @@ def main(argv=None):
     print("Initializing models")
     model = Model()
     lr = FLAGS.lr
+    logger = Logger(os.path.join(FLAGS.gen_frm_dir, 'board'), model.sess)
+    logger.define_item("loss", Logger.Scalar, ())
+
+    # prepare tensorboard logging
+    loss_ph = tf.placeholder(tf.float32, shape=(), name='loss')
+    loss_sm = tf.summary.scalar('loss', loss_ph)
+    writer = tf.summary.FileWriter(os.path.join(FLAGS.gen_frm_dir, 'board'), model.sess.graph)
 
     delta = 0.00002
     base = 0.99998
@@ -253,6 +261,7 @@ def main(argv=None):
             ims_rev = ims[:, ::-1]
             cost += model.train(ims_rev, lr, mask_true)
             cost = cost / 2
+        logger.add('loss', cost, itr)
 
         if itr % FLAGS.display_interval == 0:
             print('itr: ' + str(itr))
