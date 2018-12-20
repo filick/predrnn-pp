@@ -242,7 +242,7 @@ def main(argv=None):
             train_input_handle.begin(do_shuffle=True)
         ims = train_input_handle.get_batch()
         ims = preprocess.reshape_patch(ims, FLAGS.patch_size)
-
+        '''
         if itr < 50000:
             eta -= delta
         else:
@@ -251,17 +251,20 @@ def main(argv=None):
             (FLAGS.batch_size, FLAGS.seq_length - FLAGS.input_length - 1))
         true_token = (random_flip < eta)
         #true_token = (random_flip < pow(base,itr))
+        '''
         mask_true = np.zeros([FLAGS.batch_size,
                               FLAGS.seq_length - FLAGS.input_length - 1,
                               FLAGS.img_width // FLAGS.patch_size,
                               FLAGS.img_width // FLAGS.patch_size,
                               FLAGS.patch_size**2 * FLAGS.img_channel], 'float32')
+        '''
         for i in range(FLAGS.batch_size):
             for j in range(FLAGS.seq_length - FLAGS.input_length - 1):
                 if true_token[i, j]:
                     mask_true[i, j, :] = 1
                 else:
                     mask_true[i, j, :] = 0
+        '''
         logger.add('lr', lr, itr)
         cost = model.train(ims, lr, mask_true)
         if FLAGS.reverse_input:

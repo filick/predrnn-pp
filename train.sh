@@ -1,16 +1,18 @@
 CUDA_VISIBLE_DEVICES=6,7 python train.py \
---save_dir ../models/radar2radar/checkpoint \
---gen_frm_dir ../models/radar2radar/gen \
+--save_dir ../models/radar2radar-finetune/checkpoint \
+--gen_frm_dir ../models/radar2radar-finetune/gen \
 --input_length 10 \
 --seq_length 21 \
 --img_width 64 \
 --img_channel 1 \
 --patch_size 4 \
 --batch_size 16 \
---lr 0.002 \
+--lr 0.0002 \
 --test_interval 1000 \
 --snapshot_interval 500 \
 --dataset_name radar \
 --train_data_paths ../data/radar/list-Z9080 \
 --valid_data_paths ../data/radar/list-Z9080 \
---reverse_input False
+--reverse_input False \
+--pretrained_model ../models/radar2radar/checkpoint/model.ckpt-80000 \
+--max_iterations 10000
