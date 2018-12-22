@@ -68,7 +68,6 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
 def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
         pred_length=11, tln=True):
 
-    last_gen_image = None
     lstm = []
     cell = []
     hidden = []
@@ -113,13 +112,14 @@ def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
         except ValueError:
             z_t = None
 
-    t = 0
-    while t + 1 - pred_length < input_length:
+    t = tf.constant(0)
+    x_gen = None
+
+    cond = lambda t: tf.less(t + 1 - pred_length, input_length)
+    def body(t):
+        nonlocal mem, z_t, x_gen
         with tf.variable_scope('predrnn_pp', reuse=tf.AUTO_REUSE):
-            if input_length > t:
-                inputs = images[:,t]
-            else:
-                inputs = x_gen
+            inputs = tf.cond(input_length > t, images[:, t], x_gen)
 
             hidden[0], cell[0], mem = lstm[0](inputs, hidden[0], cell[0], mem)
             z_t = gradient_highway(hidden[0], z_t)
@@ -134,9 +134,8 @@ def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
                                      strides=1,
                                      padding='same',
                                      name="back_to_pixel")
-            last_gen_image = x_gen
 
-        if t + 1 == input_length:
+        def in_body():
             for i in range(num_layers):
                 with tf.variable_scope('states_layer%d' % i, reuse=tf.AUTO_REUSE) as scope:
                     h = tf.get_variable('h', hidden[i].get_shape())
@@ -148,7 +147,11 @@ def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
                     m.assign(mem)
                     z = tf.get_variable('z_t', z_t.get_shape())
                     z.assign(z_t)
+        tf.cond(tf.equal(input_length, t+1), in_body, lambda: None)
+
         t += 1
 
-    return last_gen_image
+    tf.while_loop(cond, body, [i])
+
+    return x_gen
 
