@@ -3,7 +3,9 @@ import tensorflow as tf
 from nets import predrnn_pp
 
 networks_map = {'predrnn_pp': predrnn_pp.rnn,
-               }
+                'predrnn_pp_inference': predrnn_pp.rnn_inference
+                }
+
 
 def construct_model(name, images, mask_true, num_layers, num_hidden,
                     filter_size, stride, seq_length, input_length, tln):
@@ -26,5 +28,10 @@ def construct_model(name, images, mask_true, num_layers, num_hidden,
     if name not in networks_map:
         raise ValueError('Name of network unknown %s' % name)
     func = networks_map[name]
-    return func(images, mask_true, num_layers, num_hidden, filter_size,
-                stride, seq_length, input_length, tln)
+
+    if name.endswith('inference'):
+        return func(images, num_layers, num_hidden, filter_size, stride,
+                    seq_length, tln)
+    else:
+        return func(images, mask_true, num_layers, num_hidden, filter_size,
+                    stride, seq_length, input_length, tln)
