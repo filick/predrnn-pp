@@ -46,8 +46,6 @@ tf.app.flags.DEFINE_boolean('layer_norm', True,
 # inference
 tf.app.flags.DEFINE_integer('batch_size', 1,
                             'batch size for inference.')
-tf.app.flags.DEFINE_boolean('new_states', False,
-                            'whether to run model based on new states')
 
 
 class Model(object):
