@@ -31,7 +31,7 @@ def construct_model(name, images, mask_true, num_layers, num_hidden,
 
     if name.endswith('inference'):
         return func(images, num_layers, num_hidden, filter_size, stride,
-                    seq_length, tln)
+                    seq_length, input_length, tln)
     else:
         return func(images, mask_true, num_layers, num_hidden, filter_size,
                     stride, seq_length, input_length, tln)

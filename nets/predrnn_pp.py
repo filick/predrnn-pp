@@ -66,14 +66,14 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
 
 
 def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
-        pred_length=11, tln=True):
+        pred_length=11, input_length=1, tln=True):
 
     lstm = []
     cell = []
     hidden = []
     shape = images.get_shape().as_list()
     output_channels = shape[-1]
-    input_length = tf.shape(images)[1]
+    # input_length = tf.shape(images)[1]
 
     for i in range(num_layers):
         if i == 0:
@@ -90,12 +90,12 @@ def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
 
         with tf.variable_scope('states_layer%d' % i, reuse=False) as scope:
             try:
-                c = tf.get_variable('c')
+                c = tf.get_variable('c', trainable=False)
                 cell.append(c)
             except ValueError:
                 cell.append(None)
             try:
-                h = tf.get_variable('h')
+                h = tf.get_variable('h', trainable=False)
                 hidden.append(h)
             except ValueError:
                 hidden.append(None)
@@ -104,54 +104,55 @@ def rnn_inference(images, num_layers, num_hidden, filter_size, stride=1,
 
     with tf.variable_scope('states_global', reuse=False) as scope:
         try:
-            men = tf.get_variable('men')
+            mem = [tf.get_variable('mem', trainable=False)]
         except ValueError:
-            men = None
+            mem = [None]
         try:
-            z_t = tf.get_variable('z_t')
+            z_t = [tf.get_variable('z_t', trainable=False)]
         except ValueError:
-            z_t = None
+            z_t = [None]
+    x_gen = [None]
 
-    t = tf.constant(0)
-    x_gen = None
-
-    cond = lambda t: tf.less(t + 1 - pred_length, input_length)
-    def body(t):
-        nonlocal mem, z_t, x_gen
+    def step_forward(inputs):
         with tf.variable_scope('predrnn_pp', reuse=tf.AUTO_REUSE):
-            inputs = tf.cond(input_length > t, images[:, t], x_gen)
-
-            hidden[0], cell[0], mem = lstm[0](inputs, hidden[0], cell[0], mem)
-            z_t = gradient_highway(hidden[0], z_t)
-            hidden[1], cell[1], mem = lstm[1](z_t, hidden[1], cell[1], mem)
+            hidden[0], cell[0], mem[0] = lstm[0](inputs, hidden[0], cell[0], mem[0])
+            z_t[0] = gradient_highway(hidden[0], z_t[0])
+            hidden[1], cell[1], mem[0] = lstm[1](z_t[0], hidden[1], cell[1], mem[0])
 
             for i in range(2, num_layers):
-                hidden[i], cell[i], mem = lstm[i](hidden[i-1], hidden[i], cell[i], mem)
+                hidden[i], cell[i], mem[0] = lstm[i](hidden[i-1], hidden[i], cell[i], mem[0])
 
-            x_gen = tf.layers.conv2d(inputs=hidden[num_layers-1],
-                                     filters=output_channels,
-                                     kernel_size=1,
-                                     strides=1,
-                                     padding='same',
-                                     name="back_to_pixel")
-
-        def in_body():
-            for i in range(num_layers):
-                with tf.variable_scope('states_layer%d' % i, reuse=tf.AUTO_REUSE) as scope:
-                    h = tf.get_variable('h', hidden[i].get_shape())
-                    h.assign(hidden[i])
-                    c = tf.get_variable('c', cell[i].get_shape())
-                    c.assign(cell[i])
-                with tf.variable_scope('states_global', reuse=tf.AUTO_REUSE) as scope:
-                    m = tf.get_variable('mem', mem.get_shape())
-                    m.assign(mem)
-                    z = tf.get_variable('z_t', z_t.get_shape())
-                    z.assign(z_t)
-        tf.cond(tf.equal(input_length, t+1), in_body, lambda: None)
-
+            x_gen[0] = tf.layers.conv2d(inputs=hidden[num_layers-1],
+                                       filters=output_channels,
+                                       kernel_size=1,
+                                       strides=1,
+                                       padding='same',
+                                       name="back_to_pixel")
+    '''
+    t = tf.constant(0)
+    cond = lambda t: tf.less(t, input_length)
+    def body(t):
+        step_forward(images[:, t])
         t += 1
+    tf.while_loop(cond, body, [t])
+    '''
+    for t in range(input_length):
+        step_forward(images[:,t])
 
-    tf.while_loop(cond, body, [i])
+    for i in range(num_layers):
+        with tf.variable_scope('states_layer%d' % i, reuse=tf.AUTO_REUSE) as scope:
+            h = tf.get_variable('h', hidden[i].get_shape(), trainable=False)
+            h.assign(hidden[i])
+            c = tf.get_variable('c', cell[i].get_shape(), trainable=False)
+            c.assign(cell[i])
+        with tf.variable_scope('states_global', reuse=tf.AUTO_REUSE) as scope:
+            m = tf.get_variable('mem', mem[0].get_shape(), trainable=False)
+            m.assign(mem[0])
+            z = tf.get_variable('z_t', z_t[0].get_shape(), trainable=False)
+            z.assign(z_t[0])
 
-    return x_gen
+    for i in range(pred_length - 1):
+        step_forward(x_gen[0])
+
+    return x_gen[0]
 

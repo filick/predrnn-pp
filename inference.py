@@ -27,6 +27,7 @@ tf.app.flags.DEFINE_string('model_name', 'predrnn_pp_inference',
                            'The name of the architecture.')
 tf.app.flags.DEFINE_string('pretrained_model', '',
                            'file of a pretrained model to initialize from.')
+tf.app.flags.DEFINE_integer('input_length', 1, '')
 tf.app.flags.DEFINE_integer('pred_length', 11,
                             'total input and output length.')
 tf.app.flags.DEFINE_integer('img_width', 64,
@@ -57,7 +58,7 @@ class Model(object):
         # inputs
         self.x = tf.placeholder(tf.float32,
                                 [FLAGS.batch_size,
-                                 None,
+                                 FLAGS.input_length,
                                  FLAGS.img_width // FLAGS.patch_size,
                                  FLAGS.img_width // FLAGS.patch_size,
                                  FLAGS.patch_size * FLAGS.patch_size * FLAGS.img_channel])
@@ -76,7 +77,7 @@ class Model(object):
                         FLAGS.model_name, x_splits[i], None,
                         num_layers, num_hidden,
                         FLAGS.filter_size, FLAGS.stride,
-                        FLAGS.pred_length, None,
+                        FLAGS.pred_length, FLAGS.input_length,
                         FLAGS.layer_norm)
                     pred_seq.append(pred_ims)
                     outer_scope.reuse_variables()
@@ -85,6 +86,13 @@ class Model(object):
             self.pred_seq = tf.concat(pred_seq, 0)
 
         # session
+        variables = tf.global_variables()
+        '''
+        import IPython
+        IPython.embed()
+        '''
+        variables = list(filter(lambda v: 'states_layer' not in v.name and 'states_global' not in v.name, variables))
+        self.saver = tf.train.Saver(variables)
         init = tf.global_variables_initializer()
         configProt = tf.ConfigProto()
         configProt.gpu_options.allow_growth = True
