@@ -85,10 +85,6 @@ class Model(object):
 
         # session
         variables = tf.global_variables()
-        '''
-        import IPython
-        IPython.embed()
-        '''
         variables = list(filter(lambda v: 'states_layer' not in v.name and 'states_global' not in v.name, variables))
         self.saver = tf.train.Saver(variables)
         init = tf.global_variables_initializer()
@@ -104,15 +100,6 @@ class Model(object):
         feed_dict = {self.x: inputs}
         gen_ims = self.sess.run(self.pred_seq, feed_dict)
         return gen_ims
-
-
-def read_radar_file(file):
-    img = np.array(Level3File(file).sym_block[0][0]['data'], dtype='uint8')
-    h, w = img.shape
-    nw = FLAGS.img_width
-    nh = h * nw // w
-    img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
-    return img[np.newaxis, np.newaxis, :, :, np.newaxis]
 
 
 def main(argv=None):
@@ -140,8 +127,6 @@ def main(argv=None):
 
         except Exception as e:
             print('failed:', e)
-            import IPython
-            IPython.embed()
 
 
 if __name__ == '__main__':
