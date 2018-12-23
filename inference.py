@@ -6,6 +6,7 @@ import sys
 import random
 import os
 from nets import models_factory
+from utils import tf_util, preprocess
 from metpy.io import Level3File
 from skimage.external.tifffile import imsave
 
@@ -22,7 +23,7 @@ tf.app.flags.DEFINE_string('save_name', '',
 # model
 tf.app.flags.DEFINE_string('model_name', 'predrnn_pp_inference',
                            'The name of the architecture.')
-tf.app.flags.DEFINE_string('pretrained_model', '',
+tf.app.flags.DEFINE_string('pretrained_model', 'dat/model.ckpt-10000',
                            'file of a pretrained model to initialize from.')
 tf.app.flags.DEFINE_integer('input_length', 1, '')
 tf.app.flags.DEFINE_integer('pred_length', 11,
@@ -122,20 +123,25 @@ def main(argv=None):
         line = input()
         try:
             inf, outf = line.split(',')
-            img = np.array(Level3File(file).sym_block[0][0]['data'], dtype='float32')
+            img = np.array(Level3File(inf).sym_block[0][0]['data'], dtype='float32')
             h, w = img.shape
             nw = FLAGS.img_width
             nh = h * nw // w
             img = cv2.resize(img, (nh, nw), interpolation=cv2.INTER_AREA)
+            img = img[np.newaxis, np.newaxis, :, :, np.newaxis]
+            img = preprocess.reshape_patch(img, FLAGS.patch_size)
 
-            pred = model.inference(img[np.newaxis, np.newaxis, :, :, np.newaxis])
-            pred = cv2.resize(pred[0, 0, :, :, 0], (h, w), interpolattion=cv2.INTER_CUBIC)
+            pred = model.inference(img)
+            pred = preprocess.reshape_patch_back(pred[:, np.newaxis, :], FLAGS.patch_size)
+            pred = cv2.resize(pred[0, 0, :, :, 0], (h, w), interpolation=cv2.INTER_CUBIC)
 
             imsave(outf, pred, metadata={'axis': 'YX'})
             print('done')
 
-        except:
-            print('failed')
+        except Exception as e:
+            print('failed:', e)
+            import IPython
+            IPython.embed()
 
 
 if __name__ == '__main__':
