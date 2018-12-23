@@ -8,7 +8,7 @@ def _img_arg(img, img_width, rng):
     h, w = img.shape
     nw = img_width
     nh = h * nw // w
-    return cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
+    return cv2.resize(img, (nh, nw), interpolation=cv2.INTER_AREA)
 
 
 class InputHandle(object):

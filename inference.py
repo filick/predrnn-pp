@@ -6,12 +6,9 @@ import sys
 import random
 import os
 from nets import models_factory
-from data_provider import datasets_factory
-from utils import preprocess
-from utils import metrics
-from utils import tf_util
-from utils.tf_util import Logger
-from skimage.measure import compare_ssim
+from metpy.io import Level3File
+from skimage.external.tifffile import imsave
+
 
 # -----------------------------------------------------------------------------
 FLAGS = tf.app.flags.FLAGS
@@ -108,10 +105,37 @@ class Model(object):
         return gen_ims
 
 
+def read_radar_file(file):
+    img = np.array(Level3File(file).sym_block[0][0]['data'], dtype='uint8')
+    h, w = img.shape
+    nw = FLAGS.img_width
+    nh = h * nw // w
+    img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
+    return img[np.newaxis, np.newaxis, :, :, np.newaxis]
+
+
 def main(argv=None):
 
-    print("Initializing models")
     model = Model()
+
+    while True:
+        line = input()
+        try:
+            inf, outf = line.split(',')
+            img = np.array(Level3File(file).sym_block[0][0]['data'], dtype='float32')
+            h, w = img.shape
+            nw = FLAGS.img_width
+            nh = h * nw // w
+            img = cv2.resize(img, (nh, nw), interpolation=cv2.INTER_AREA)
+
+            pred = model.inference(img[np.newaxis, np.newaxis, :, :, np.newaxis])
+            pred = cv2.resize(pred[0, 0, :, :, 0], (h, w), interpolattion=cv2.INTER_CUBIC)
+
+            imsave(outf, pred, metadata={'axis': 'YX'})
+            print('done')
+
+        except:
+            print('failed')
 
 
 if __name__ == '__main__':
