@@ -61,9 +61,10 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
 
     helper = _RadarMetaHelper(radar_meta)
     rain_writer = open(os.path.join(
-        rain_file_root, os.path.basename(radar_meta)), 'w')
+        rain_file_root, os.path.basename(radar_meta)) + '_1', 'w')
 
     block = []
+    block_var = []
     for y in sorted(os.listdir(rain_file_root)):
         y_path = os.path.join(rain_file_root, y)
         if not os.path.isdir(y_path):
@@ -74,29 +75,31 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
             for d in sorted(os.listdir(m_path)):
                 d_path = os.path.join(m_path, d)
                 for f in sorted(os.listdir(d_path)):
-                    file_path = os.path.abspath(os.path.join(d_path, f))
-                    time_str = f.split('.')[-1].split('_')[0]
-                    time = datetime.datetime.strptime(time_str, '%Y%m%d%H%M%S')
-
-                    obj = json.load(open(file_path, 'r'))
-                    observed = np.array(list(map(lambda item: [float(item['Lat']), float(
-                        item['Lon']), float(item['PRE_1h'])], obj['DS'])))
-                    observed = observed[observed[:, 0] > min_lat]
-                    observed = observed[observed[:, 0] < max_lat]
-                    observed = observed[observed[:, 1] > min_lon]
-                    observed = observed[observed[:, 1] < max_lon]
-                    observed = observed[observed[:, 2] < 10000]
-
                     try:
+                        file_path = os.path.abspath(os.path.join(d_path, f))
+                        time_str = f.split('.')[-1].split('_')[0] + '00'
+                        time = datetime.datetime.strptime(time_str, '%Y%m%d%H%M%S')
+
+                        obj = json.load(open(file_path, 'r'))
+                        observed = np.array(list(map(lambda item: [float(item['Lat']), float(
+                            item['Lon']), float(item['PRE_1h'])], obj['DS'])))
+                        observed = observed[observed[:, 0] > min_lat]
+                        observed = observed[observed[:, 0] < max_lat]
+                        observed = observed[observed[:, 1] > min_lon]
+                        observed = observed[observed[:, 1] < max_lon]
+                        observed = observed[observed[:, 2] < 10000]
+
+                        if observed.size == 0:
+                            continue
+
                         interp_model = OrdinaryKriging(observed[:, 0], observed[:, 1], observed[:, 2],
                                                        variogram_model='exponential', verbose=False, enable_plotting=False)
-                        z, _ = interp_model.execute('grid', grid_lat, grid_lon)
+                        z, ss = interp_model.execute('grid', grid_lat, grid_lon)
                     except Exception as e:
-                        print('Error with %s' % file_path)
-                        print(e)
+                        # print('Error with %s: %s' % (f, str(e)))
                         continue
-
-                    block.append(z)
+                    block.append(z.data)
+                    block_var.append(ss.data)
                     max_rain = np.max(observed[:, 2])
 
                     while helper.has_next() and helper.get_next()[1] < time_str:
@@ -121,13 +124,19 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
 
     rain_writer.flush()
     rain_writer.close()
-
+    
     block = np.stack(block)
+    block_var = np.stack(block_var)
     outname = os.path.basename(radar_meta)
-    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '.npy'), block)
+    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '_1.npy'), block)
+    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '_var_1.npy'), block_var)
 
 
 if __name__ == '__main__':
     grid_lon = np.arange(81.2547209531, 86.95, 0.09038990625)
     grid_lat = np.arange(46.41491156, 42.3490, -0.064536875)
-    process('../data/rain', '../data/radar/list-Z9080', grid_lon, grid_lat)
+    try:
+        process('../data/rain', '../data/radar/list-Z9080', grid_lon, grid_lat)
+    except Exception as e:
+        import IPython
+        IPython.embed()
