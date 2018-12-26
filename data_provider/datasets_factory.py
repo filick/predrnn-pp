@@ -1,8 +1,9 @@
-from data_provider import mnist, radar
+from data_provider import mnist, radar, rain
 
 datasets_map = {
     'mnist': mnist,
-    'radar': radar
+    'radar': radar,
+    'rain': rain
 }
 
 
@@ -61,6 +62,17 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
                 train_data_paths, seq_length, batch_size, img_width, False)
             train_input_handle.begin(do_shuffle=True)
             return train_input_handle, test_input_handle
+        else:
+            return test_input_handle
+
+    if dataset_name == 'rain':
+        test_input_handle = datasets_map[dataset_name].InputHandle(
+            train_data_paths, valid_data_paths, seq_length - 1, batch_size, img_width, True)
+        test_input_handle.begin(do_shuffle=False)
+        if is_training:
+            train_input_handle = datasets_map[dataset_name].InputHandle(
+                train_data_paths, valid_data_paths, seq_length - 1, batch_size, img_width, False)
+            train_input_handle.begin(do_shuffle=True)
         else:
             return test_input_handle
 

@@ -5,9 +5,11 @@ from layers.GradientHighwayUnit import GHU as ghu
 from layers.CausalLSTMCell import CausalLSTMCell as cslstm
 
 def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
-        seq_length=20, input_length=10, tln=True):
+        seq_length=11, input_length=10, tln=True):
 
-    gen_images = []
+    assert seq_length == input_length + 1
+
+    gen_images = None
     lstm = []
     cell = []
     hidden = []
@@ -37,10 +39,7 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
     for t in range(seq_length-1):
         reuse = bool(gen_images)
         with tf.variable_scope('predrnn_pp', reuse=reuse):
-            if t < input_length:
-                inputs = images[:,t]
-            else:
-                inputs = mask_true[:,t-input_length]*images[:,t] + (1-mask_true[:,t-input_length])*x_gen
+            inputs = images[:,t]
 
             hidden[0], cell[0], mem = lstm[0](inputs, hidden[0], cell[0], mem)
             z_t = gradient_highway(hidden[0], z_t)
@@ -49,19 +48,19 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
             for i in range(2, num_layers):
                 hidden[i], cell[i], mem = lstm[i](hidden[i-1], hidden[i], cell[i], mem)
 
-            x_gen = tf.layers.conv2d(inputs=hidden[num_layers-1],
-                                     filters=output_channels,
-                                     kernel_size=1,
-                                     strides=1,
-                                     padding='same',
-                                     name="back_to_pixel")
-            gen_images.append(x_gen)
+            if t == seq_length - 2:
+                gen_images = tf.layers.conv2d(inputs=hidden[num_layers-1],
+                                              filters=output_channels,
+                                              kernel_size=1,
+                                              strides=1,
+                                              padding='same',
+                                              name="back_to_pixel")
 
-    gen_images = tf.stack(gen_images)
+    # gen_images = tf.stack(gen_images)
     # [batch_size, seq_length, height, width, channels]
-    gen_images = tf.transpose(gen_images, [1,0,2,3,4])
-    loss = tf.nn.l2_loss(gen_images - images[:,1:])
-    loss += tf.reduce_sum(tf.abs(gen_images - images[:,1:]))
+    # gen_images = tf.transpose(gen_images, [1,0,2,3,4])
+    loss = tf.nn.l2_loss(gen_images - images[:,-1])
+    loss += tf.reduce_sum(tf.abs(gen_images - images[:,-1]))
     return [gen_images, loss]
 
 

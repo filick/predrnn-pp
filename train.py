@@ -71,6 +71,8 @@ tf.app.flags.DEFINE_integer('test_interval', 2000,
 tf.app.flags.DEFINE_integer('snapshot_interval', 10000,
                             'number of iters saving models.')
 
+assert FLAGS.input_length + 1 == FLAGS.seq_length
+
 
 def average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers.
@@ -122,14 +124,7 @@ class Model(object):
                                  FLAGS.img_width // FLAGS.patch_size,
                                  FLAGS.patch_size * FLAGS.patch_size * FLAGS.img_channel])
 
-        self.mask_true = tf.placeholder(tf.float32,
-                                        [FLAGS.batch_size,
-                                         FLAGS.seq_length - FLAGS.input_length - 1,
-                                         FLAGS.img_width // FLAGS.patch_size,
-                                         FLAGS.img_width // FLAGS.patch_size,
-                                         FLAGS.patch_size * FLAGS.patch_size * FLAGS.img_channel])
         x_splits = tf.split(self.x, max(self.num_gpus, 1))
-        mask_true_splits = tf.split(self.mask_true, max(self.num_gpus, 1))
 
         self.tf_lr = tf.placeholder(tf.float32, shape=[])
         num_hidden = [int(x) for x in FLAGS.num_hidden.split(',')]
@@ -147,15 +142,15 @@ class Model(object):
             for i, d in enumerate(devices):
                 with tf.device(d), tf.name_scope('tower_%d' % i):
                     output_list = models_factory.construct_model(
-                        FLAGS.model_name, x_splits[i],
-                        mask_true_splits[i],
+                        FLAGS.model_name,
+                        x_splits[i], None,
                         num_layers, num_hidden,
                         FLAGS.filter_size, FLAGS.stride,
                         FLAGS.seq_length, FLAGS.input_length,
                         FLAGS.layer_norm)
                     gen_ims = output_list[0]
                     loss = output_list[1]
-                    pred_ims = gen_ims[:, FLAGS.input_length - 1:]
+                    pred_ims = gen_ims
                     # self.loss_train = loss / FLAGS.batch_size
                     # gradients
                     with tf.name_scope("compute_gradients"):
@@ -185,16 +180,14 @@ class Model(object):
         if FLAGS.pretrained_model:
             self.saver.restore(self.sess, FLAGS.pretrained_model)
 
-    def train(self, inputs, lr, mask_true):
+    def train(self, inputs, lr):
         feed_dict = {self.x: inputs}
         feed_dict.update({self.tf_lr: lr})
-        feed_dict.update({self.mask_true: mask_true})
         loss, _ = self.sess.run((self.loss_train, self.train_op), feed_dict)
         return loss
 
-    def test(self, inputs, mask_true):
+    def test(self, inputs):
         feed_dict = {self.x: inputs}
-        feed_dict.update({self.mask_true: mask_true})
         gen_ims = self.sess.run(self.pred_seq, feed_dict)
         return gen_ims
 
@@ -230,12 +223,7 @@ def main(argv=None):
     logger.define_item("fmae", Logger.Scalar, ())
     logger.define_item("ssim", Logger.Scalar, ())
     logger.define_item("sharp", Logger.Scalar, ())
-    logger.define_item("image", Logger.Image, (1, 2 * FLAGS.img_width,
-                                               FLAGS.img_width * (FLAGS.seq_length - FLAGS.input_length), FLAGS.img_channel), dtype='uint8')
-
-    delta = 0.00002
-    base = 0.99998
-    eta = 1
+    logger.define_item("image", Logger.Image, (1, 2 * FLAGS.img_width, FLAGS.img_width, FLAGS.img_channel), dtype='uint8')
 
     for itr in range(1, FLAGS.max_iterations + 1):
         if train_input_handle.no_batch_left():
@@ -243,27 +231,8 @@ def main(argv=None):
         ims = train_input_handle.get_batch()
         ims = preprocess.reshape_patch(ims, FLAGS.patch_size)
 
-        if itr < 50000:
-            eta -= delta
-        else:
-            eta = 0.0
-        random_flip = np.random.random_sample(
-            (FLAGS.batch_size, FLAGS.seq_length - FLAGS.input_length - 1))
-        true_token = (random_flip < eta)
-        #true_token = (random_flip < pow(base,itr))
-        mask_true = np.zeros([FLAGS.batch_size,
-                              FLAGS.seq_length - FLAGS.input_length - 1,
-                              FLAGS.img_width // FLAGS.patch_size,
-                              FLAGS.img_width // FLAGS.patch_size,
-                              FLAGS.patch_size**2 * FLAGS.img_channel], 'float32')
-        for i in range(FLAGS.batch_size):
-            for j in range(FLAGS.seq_length - FLAGS.input_length - 1):
-                if true_token[i, j]:
-                    mask_true[i, j, :] = 1
-                else:
-                    mask_true[i, j, :] = 0
         logger.add('lr', lr, itr)
-        cost = model.train(ims, lr, mask_true)
+        cost = model.train(ims, lr)
         if FLAGS.reverse_input:
             ims_rev = ims[:, ::-1]
             cost += model.train(ims_rev, lr, mask_true)
@@ -288,25 +257,20 @@ def main(argv=None):
                 psnr.append(0)
                 fmae.append(0)
                 sharp.append(0)
-            mask_true = np.zeros((FLAGS.batch_size,
-                                  FLAGS.seq_length - FLAGS.input_length - 1,
-                                  FLAGS.img_width // FLAGS.patch_size,
-                                  FLAGS.img_width // FLAGS.patch_size,
-                                  FLAGS.patch_size**2 * FLAGS.img_channel))
             while(test_input_handle.no_batch_left() == False):
                 batch_id = batch_id + 1
                 test_ims = test_input_handle.get_batch()
                 test_dat = preprocess.reshape_patch(test_ims, FLAGS.patch_size)
-                img_gen = model.test(test_dat, mask_true)
+                img_gen = model.test(test_dat)
 
                 # concat outputs of different gpus along batch
                 # img_gen = np.concatenate(img_gen)
                 img_gen = preprocess.reshape_patch_back(
-                    img_gen, FLAGS.patch_size)
+                    img_gen[:, np.newaxis, :, :, :], FLAGS.patch_size)
                 # MSE per frame
-                for i in range(FLAGS.seq_length - FLAGS.input_length):
-                    x = test_ims[:, i + FLAGS.input_length, :, :, 0]
-                    gx = img_gen[:, i, :, :, 0]
+                for i in range(1):
+                    x = test_ims[:, -1, :, :, 0]
+                    gx = img_gen[:, :, :, 0]
                     fmae[i] += metrics.batch_mae_frame_float(gx, x)
                     gx = np.maximum(gx, 0)
                     gx = np.minimum(gx, 1)
@@ -328,18 +292,16 @@ def main(argv=None):
                 if batch_id == 1:
                     sel = np.random.randint(FLAGS.batch_size)
                     img_seq_pd = img_gen[sel]
-                    img_seq_gt = test_ims[sel, FLAGS.input_length:]
-                    s, h, w = img_gen.shape[1:4]
+                    img_seq_gt = test_ims[sel, -1]
+                    h, w = img_gen.shape[1:3]
                     out_img = np.zeros(
-                        (1, h * 2, w * s, FLAGS.img_channel), dtype='uint8')
+                        (1, h * 2, w * 1, FLAGS.img_channel), dtype='uint8')
                     for i, img_seq in enumerate([img_seq_gt, img_seq_pd]):
-                        for j in range(s):
-                            img = img_seq[j]
-                            img = np.maximum(img, 0)
-                            img = np.uint8(img * 10)
-                            img = np.minimum(img, 255)
-                            out_img[0, (i * h):(i * h + h),
-                                    (j * w):(j * w + w)] = img
+                        img = img_seq
+                        img = np.maximum(img, 0)
+                        img = np.uint8(img * 10)
+                        img = np.minimum(img, 255)
+                        out_img[0, (i * h):(i * h + h), :] = img
                     logger.add("image", out_img, itr)
 
                 test_input_handle.next()
