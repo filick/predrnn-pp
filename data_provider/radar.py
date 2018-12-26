@@ -7,6 +7,8 @@ import os
 def _img_arg(img, img_width, rng):
     h, w = img.shape
     nw = img_width
+    if w == nw:
+        return img
     nh = h * nw // w
     return cv2.resize(img, (nh, nw), interpolation=cv2.INTER_AREA)
 
