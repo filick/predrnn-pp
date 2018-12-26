@@ -73,6 +73,7 @@ def data_provider(dataset_name, train_data_paths, valid_data_paths, batch_size,
             train_input_handle = datasets_map[dataset_name].InputHandle(
                 train_data_paths, valid_data_paths, seq_length - 1, batch_size, img_width, False)
             train_input_handle.begin(do_shuffle=True)
+            return train_input_handle, test_input_handle
         else:
             return test_input_handle
 

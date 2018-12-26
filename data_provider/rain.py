@@ -48,13 +48,13 @@ class InputHandle(object):
 
         assert len(self.selected_radar_idx) == len(self.selected_rain_idx)
 
-        if InputHandle.rain_data == None:
+        if InputHandle.rain_data is None:
             dirname = os.path.dirname(rain_meta)
             filename = os.path.basename(rain_meta)
             InputHandle.rain_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
             InputHandle.rain_data[InputHandle.rain_data > 450] = 450
 
-        if InputHandle.radar_data == None:
+        if InputHandle.radar_data is None:
             dirname = os.path.dirname(radar_meta)
             filename = os.path.basename(radar_meta)
             InputHandle.radar_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))

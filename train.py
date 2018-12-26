@@ -270,7 +270,7 @@ def main(argv=None):
                 # MSE per frame
                 for i in range(1):
                     x = test_ims[:, -1, :, :, 0]
-                    gx = img_gen[:, :, :, 0]
+                    gx = img_gen[:, 0, :, :, 0]
                     fmae[i] += metrics.batch_mae_frame_float(gx, x)
                     gx = np.maximum(gx, 0)
                     gx = np.minimum(gx, 1)
@@ -291,9 +291,9 @@ def main(argv=None):
                 # save prediction examples
                 if batch_id == 1:
                     sel = np.random.randint(FLAGS.batch_size)
-                    img_seq_pd = img_gen[sel]
+                    img_seq_pd = img_gen[sel, 0]
                     img_seq_gt = test_ims[sel, -1]
-                    h, w = img_gen.shape[1:3]
+                    h, w = img_gen.shape[2:4]
                     out_img = np.zeros(
                         (1, h * 2, w * 1, FLAGS.img_channel), dtype='uint8')
                     for i, img_seq in enumerate([img_seq_gt, img_seq_pd]):

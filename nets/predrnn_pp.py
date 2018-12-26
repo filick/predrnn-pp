@@ -37,8 +37,8 @@ def rnn(images, mask_true, num_layers, num_hidden, filter_size, stride=1,
     z_t = None
 
     for t in range(seq_length-1):
-        reuse = bool(gen_images)
-        with tf.variable_scope('predrnn_pp', reuse=reuse):
+        # reuse = mem is not None
+        with tf.variable_scope('predrnn_pp', reuse=tf.AUTO_REUSE):
             inputs = images[:,t]
 
             hidden[0], cell[0], mem = lstm[0](inputs, hidden[0], cell[0], mem)
