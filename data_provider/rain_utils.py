@@ -61,7 +61,7 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
 
     helper = _RadarMetaHelper(radar_meta)
     rain_writer = open(os.path.join(
-        rain_file_root, os.path.basename(radar_meta)) + '_1', 'w')
+        rain_file_root, os.path.basename(radar_meta)), 'w')
 
     block = []
     block_var = []
@@ -89,12 +89,21 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
                         observed = observed[observed[:, 1] < max_lon]
                         observed = observed[observed[:, 2] < 10000]
 
-                        if observed.size == 0:
+                        if observed.size < 3 * 3:
                             continue
 
-                        interp_model = OrdinaryKriging(observed[:, 0], observed[:, 1], observed[:, 2],
-                                                       variogram_model='exponential', verbose=False, enable_plotting=False)
-                        z, ss = interp_model.execute('grid', grid_lat, grid_lon)
+                        max_rain = np.max(observed[:, 2])
+                        done = False
+                        for model in ['exponential', 'spherical', 'gaussian', 'linear']:
+                            interp_model = OrdinaryKriging(observed[:, 0], observed[:, 1], observed[:, 2],
+                                                           variogram_model=model, verbose=False, enable_plotting=False)
+                            z, ss = interp_model.execute('grid', grid_lat, grid_lon)
+                            if max(ss.data.max() < max_rain * 10, 10):
+                                done = True
+                                break
+                        if not done:
+                            continue
+
                     except Exception as e:
                         # print('Error with %s: %s' % (f, str(e)))
                         continue
@@ -128,8 +137,8 @@ def process(rain_file_root, radar_meta, grid_lon, grid_lat):
     block = np.stack(block)
     block_var = np.stack(block_var)
     outname = os.path.basename(radar_meta)
-    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '_1.npy'), block)
-    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '_var_1.npy'), block_var)
+    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '.npy'), block)
+    np.save(os.path.join(rain_file_root, outname.split('-')[-1] + '_var.npy'), block_var)
 
 
 if __name__ == '__main__':

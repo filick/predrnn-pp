@@ -26,3 +26,10 @@ class Logger(object):
     def add(self, name, value, step):
         s = self.sess.run(self.summaries[name], feed_dict={self.holders[name]: value})
         self.writer.add_summary(s, step)
+
+
+def smooth_L1(x):
+    absx = tf.abs(x)
+    minx = tf.minimum(absx, 1)
+    r = 0.5 * ((absx - 1) * minx + absx)
+    return r

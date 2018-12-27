@@ -22,6 +22,27 @@ class InputHandle(object):
             return [int(items[2]), int(items[3]), int(items[0][:4])]
         self.rain_meta = np.array([process_rain_line(line) for line in open(rain_meta, 'r')], dtype='int')
 
+        self.rain_valid = np.ones(shape=(self.rain_meta.shape[0],), dtype='int') 
+        if InputHandle.rain_data is None:
+            dirname = os.path.dirname(rain_meta)
+            filename = os.path.basename(rain_meta)
+            InputHandle.rain_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
+            high = InputHandle.rain_data.max(axis=(1,2))
+            low  = InputHandle.rain_data.min(axis=(1,2))
+            self.rain_valid[(self.rain_data > (0.6*high + 0.4*low).reshape((-1,1,1))).sum(axis=(1,2)) < 10] = 0
+            self.rain_valid[(high - low) < 1e-3] = 0
+            self.rain_valid[high > 450] = -1
+            self.rain_valid[low < -1] = -1
+ 
+            InputHandle.rain_data[InputHandle.rain_data > 450] = 450
+            InputHandle.rain_data[InputHandle.rain_data < 1e-3] = 0
+            InputHandle.rain_data[np.where(self.rain_valid==0)[0], :, :] = 0
+
+        if InputHandle.radar_data is None:
+            dirname = os.path.dirname(radar_meta)
+            filename = os.path.basename(radar_meta)
+            InputHandle.radar_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
+
         self.selected_rain_idx = []
         self.selected_radar_idx = []
         i = radar_length - 1
@@ -32,6 +53,10 @@ class InputHandle(object):
             if is_test and y != test_year:
                 j += 1
             elif (not is_test) and y == test_year:
+                j += 1
+            elif self.rain_valid[j] == -1:
+                j += 1
+            elif self.rain_valid[j] == 0 and np.random.rand() > 0.1:
                 j += 1
             elif abs(self.rain_meta[j, 1]) > threshold:
                 j += 1
@@ -47,19 +72,6 @@ class InputHandle(object):
                 j += 1
 
         assert len(self.selected_radar_idx) == len(self.selected_rain_idx)
-
-        if InputHandle.rain_data is None:
-            dirname = os.path.dirname(rain_meta)
-            filename = os.path.basename(rain_meta)
-            InputHandle.rain_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
-            InputHandle.rain_data[InputHandle.rain_data > 450] = 450
-            InputHandle.rain_data[InputHandle.rain_data < 0] = 0
-
-        if InputHandle.radar_data is None:
-            dirname = os.path.dirname(radar_meta)
-            filename = os.path.basename(radar_meta)
-            InputHandle.radar_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
-
 
     def begin(self, do_shuffle = True):
         self.shuffle = do_shuffle

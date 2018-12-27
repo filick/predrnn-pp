@@ -300,7 +300,7 @@ def main(argv=None):
                     for i, img_seq in enumerate([img_seq_gt, img_seq_pd]):
                         img = img_seq
                         img = np.maximum(img, 0)
-                        img = np.uint8(img * 10)
+                        img = np.uint8(img * 200)
                         img = np.minimum(img, 255)
                         out_img[0, (i * h):(i * h + h), :] = img
                     logger.add("image", out_img, itr)
