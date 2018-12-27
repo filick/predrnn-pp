@@ -8,6 +8,7 @@ import cv2
 import sys
 import random
 import os
+import skimage
 from nets import models_factory
 from data_provider import datasets_factory
 from utils import preprocess
@@ -303,7 +304,9 @@ def main(argv=None):
                         img = np.minimum(img, 255)
                         out_img[0, (i * h):(i * h + h), :] = img
                     logger.add("image", out_img, itr)
-
+                    out_data = np.concatenate([img_seq_pd, img_seq_gt])
+                    skimage.external.tifffile.imsave(os.path.join(FLAGS.gen_frm_dir, '%d.tif'%itr), 
+                                                     out_data, metadata={'axis': 'YX'})
                 test_input_handle.next()
             avg_mse = avg_mse / (batch_id * FLAGS.batch_size)
             logger.add('mse', avg_mse, itr)

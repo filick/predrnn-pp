@@ -33,7 +33,7 @@ class InputHandle(object):
                 j += 1
             elif (not is_test) and y == test_year:
                 j += 1
-            elif abs(self.rain_meta[j, 1]) < threshold:
+            elif abs(self.rain_meta[j, 1]) > threshold:
                 j += 1
             elif (self.radar_meta[i] - self.radar_meta[i - radar_length + 1]) > radar_length:
                 i += 1
@@ -53,6 +53,7 @@ class InputHandle(object):
             filename = os.path.basename(rain_meta)
             InputHandle.rain_data = np.load(os.path.join(dirname, filename.split('-')[-1] + '.npy'))
             InputHandle.rain_data[InputHandle.rain_data > 450] = 450
+            InputHandle.rain_data[InputHandle.rain_data < 0] = 0
 
         if InputHandle.radar_data is None:
             dirname = os.path.dirname(radar_meta)
