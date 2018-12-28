@@ -26,7 +26,7 @@ tf.app.flags.DEFINE_string('model_name', 'predrnn_pp_inference',
 tf.app.flags.DEFINE_string('pretrained_model', 'dat/model.ckpt-10000',
                            'file of a pretrained model to initialize from.')
 tf.app.flags.DEFINE_integer('input_length', 1, '')
-tf.app.flags.DEFINE_integer('pred_length', 11,
+tf.app.flags.DEFINE_integer('pred_length', 1,
                             'total input and output length.')
 tf.app.flags.DEFINE_integer('img_width', 64,
                             'input image width.')
@@ -120,7 +120,9 @@ def main(argv=None):
 
             pred = model.inference(img)
             pred = preprocess.reshape_patch_back(pred[:, np.newaxis, :], FLAGS.patch_size)
-            pred = cv2.resize(pred[0, 0, :, :, 0], (h, w), interpolation=cv2.INTER_CUBIC)
+            pred = cv2.GaussianBlur(pred[0, 0, :, :, 0], (7, 7), 0)
+            pred = cv2.resize(pred, (h, w), interpolation=cv2.INTER_CUBIC)
+            pred[pred<0] = 0
 
             imsave(outf, pred, metadata={'axis': 'YX'})
             print('done')
