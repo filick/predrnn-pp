@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=6,7 python train.py \
---save_dir ../models/radar2rain-peakyloss/checkpoint \
---gen_frm_dir ../models/radar2rain-peakyloss/gen \
+CUDA_VISIBLE_DEVICES=4,5 python train.py \
+--save_dir ../models/radar2rain-peakyloss-fromscratch/checkpoint \
+--gen_frm_dir ../models/radar2rain-peakyloss-fromscratch/gen \
 --input_length 10 \
 --seq_length 11 \
 --img_width 64 \
@@ -13,5 +13,4 @@ CUDA_VISIBLE_DEVICES=6,7 python train.py \
 --dataset_name rain \
 --train_data_paths ../data/rain/list-Z9080 \
 --valid_data_paths ../data/radar/list-Z9080 \
---reverse_input False \
---pretrained_model ../models/radar2radar-finetune/checkpoint/model.ckpt-10000
+--reverse_input False
